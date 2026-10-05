@@ -31,7 +31,7 @@ CREATE TABLE tests (
   status          VARCHAR NOT NULL CHECK (status IN
                     ('Not started','In progress','Measure/Scanned','Failed')),
   ttf_ms          INTEGER,                     -- ms; when LabVIEW stopped the run (the ML label)
-  final_current   DOUBLE,                      -- current reached at stop; unit TO CONFIRM (A or mA)
+  final_current_ma   DOUBLE,                      -- mA; current at stop (hand-logged value x1000, or last reading of the current file)
   location        VARCHAR,                     -- lab/room, e.g. 'CREOL-A112'
   test_date       DATE,                        -- from the masterlist's M/D/YYYY
   electrolyte_id  INTEGER REFERENCES electrolytes (electrolyte_id),
@@ -139,7 +139,7 @@ SELECT
   e.concentration_mm,
   t.ph,
   t.ttf_ms,
-  t.final_current,
+  t.final_current_ma,
   cur.time_ms    AS current_time_ms,
   cur.current_ma AS current_ma,
   cvx.voltage_v AS cv_exposed_voltage_v,  cvx.capacitance_raw AS cv_exposed_capacitance,
