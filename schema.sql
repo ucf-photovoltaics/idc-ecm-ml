@@ -1,5 +1,5 @@
 -- schema_v3.sql: IDC electrochemical-migration database (DuckDB)
--- Known facts (2 mA limit, ttf meaning, pF assumption, etc.) go in the README.
+-- Assumptions and known facts about the data are listed in the README.
 
 -- boards: one row per physical board.
 CREATE TABLE boards (
@@ -10,7 +10,7 @@ CREATE TABLE boards (
 -- sensors: each board has four sensors, U1 to U4.
 CREATE TABLE sensors (
   board_id      VARCHAR NOT NULL REFERENCES boards (board_id),
-  sensor  VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
+  sensor        VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
   PRIMARY KEY (board_id, sensor)
 );
 
@@ -26,12 +26,12 @@ CREATE TABLE electrolytes (
 CREATE TABLE tests (
   test_id         INTEGER PRIMARY KEY,
   board_id        VARCHAR NOT NULL,
-  sensor    VARCHAR NOT NULL,
+  sensor          VARCHAR NOT NULL,
   run_number      INTEGER NOT NULL DEFAULT 1,  -- 1 = first test of this sensor
   status          VARCHAR NOT NULL CHECK (status IN
                     ('Not started','In progress','Measure/Scanned','Failed')),
   ttf_ms          INTEGER,                     -- ms; when LabVIEW stopped the run (the ML label)
-  final_current_ma   DOUBLE,                      -- mA; current at stop (hand-logged value x1000, or last reading of the current file)
+  final_current_ma DOUBLE,                     -- mA; current at stop (hand-logged amps x1000, or last reading of the current file)
   location        VARCHAR,                     -- lab/room, e.g. 'CREOL-A112'
   test_date       DATE,                        -- from the masterlist's M/D/YYYY
   electrolyte_id  INTEGER REFERENCES electrolytes (electrolyte_id),
@@ -48,7 +48,7 @@ CREATE TABLE tests (
 CREATE TABLE measurement_files (
   file_id       INTEGER PRIMARY KEY,
   board_id      VARCHAR NOT NULL,
-  sensor  VARCHAR NOT NULL,
+  sensor        VARCHAR NOT NULL,
   kind          VARCHAR NOT NULL CHECK (kind IN ('CV','CF','CURRENT_TIME')),
   file_date     DATE NOT NULL,                -- date in the filename
   sweep_index   INTEGER CHECK (sweep_index >= 0),  -- 0 = pristine, 1+ = exposed; blank for current files
@@ -95,7 +95,7 @@ CREATE TABLE images (
   image_id      INTEGER PRIMARY KEY,
   board_id      VARCHAR NOT NULL REFERENCES boards (board_id),
   board_type    INTEGER NOT NULL,             -- copied from the board ID
-  sensor  VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
+  sensor        VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
   scan_index    INTEGER NOT NULL CHECK (scan_index >= 0),  -- 0 = pristine (shared per board type), 1+ = exposed
   repo_path     VARCHAR NOT NULL UNIQUE,
   sha256        VARCHAR NOT NULL,
