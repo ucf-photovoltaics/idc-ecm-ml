@@ -1,0 +1,6 @@
+[project]
+name = "idc-ecm-ml"
+version = "0.1.0"
+description = "IDC electrochemical-migration database (EMA 5937 ETL)"
+requires-python = ">=3.11"
+dependencies = ["duckdb>=1.2"]
