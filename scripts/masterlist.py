@@ -44,7 +44,12 @@ def split_electrolyte(label):
 
 
 def read_masterlist(path):
-    """Return (electrolytes, tests), both as lists of tuples in table column order."""
+    """Return (electrolytes, tests, current_files).
+
+    electrolytes and tests are lists of tuples in table column order.
+    current_files says, for tests whose Current cell holds a file name instead
+    of a number, which file that is: {test_id: file name}.
+    """
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
 
@@ -56,6 +61,7 @@ def read_masterlist(path):
 
     # tests: one row per masterlist row, in file order.
     tests = []
+    current_files = {}
     seen = {}  # how many times we have met each (board, sensor)
     for number, r in enumerate(rows, start=1):
         board_id = r["Board ID"].strip()
@@ -68,6 +74,9 @@ def read_masterlist(path):
         # Cells holding a file name are not numbers, so they stay blank here.
         current = to_number(r["Current"])
         final_current_ma = round(current * 1000, 6) if current is not None else None
+        # A cell that is not a number but not blank holds a current-file name.
+        if current is None and to_text(r["Current"]) is not None:
+            current_files[number] = to_text(r["Current"])
 
         date_text = to_text(r["Date"])
         test_date = (datetime.strptime(date_text, "%m/%d/%Y").date()
@@ -90,4 +99,4 @@ def read_masterlist(path):
             to_text(r["Notes"]),
             number,                                   # source_row
         ))
-    return electrolytes, tests
+    return electrolytes, tests, current_files
