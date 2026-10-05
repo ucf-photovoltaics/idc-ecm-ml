@@ -90,16 +90,16 @@ CREATE TABLE cf_curves (
          AND len(frequency_hz) = len(phase_deg))
 );
 
--- images: microscope picture paths (the pictures stay as files).
+-- images: whole-board microscope scans (the pictures stay as files).
 CREATE TABLE images (
-  image_id      INTEGER PRIMARY KEY,
-  board_id      VARCHAR NOT NULL REFERENCES boards (board_id),
-  board_type    INTEGER NOT NULL,             -- copied from the board ID
-  sensor        VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
-  scan_index    INTEGER NOT NULL CHECK (scan_index >= 0),  -- 0 = pristine (shared per board type), 1+ = exposed
-  repo_path     VARCHAR NOT NULL UNIQUE,
-  sha256        VARCHAR NOT NULL,
-  UNIQUE (board_id, sensor, scan_index)
+  image_id    INTEGER PRIMARY KEY,
+  board_id    VARCHAR NOT NULL REFERENCES boards (board_id),
+  board_type  INTEGER NOT NULL,             -- copied from the board ID
+  scan_date   DATE,                         -- date in the filename; blank for pristine templates
+  scan_index  INTEGER NOT NULL CHECK (scan_index >= 0),  -- 0 = pristine template (shared per board type), 1+ = exposed
+  repo_path   VARCHAR NOT NULL UNIQUE,
+  sha256      VARCHAR NOT NULL,
+  UNIQUE (board_id, scan_date, scan_index)
 );
 
 -- v_ttf_check: last time in each current file vs the masterlist ttf. Big differences need a look.
@@ -128,7 +128,7 @@ newest_exposed_image AS (
   SELECT * FROM images
   WHERE scan_index >= 1
   QUALIFY row_number() OVER (
-            PARTITION BY board_id, sensor ORDER BY scan_index DESC) = 1
+            PARTITION BY board_id ORDER BY scan_date DESC, scan_index DESC) = 1
 )
 SELECT
   t.board_id || '_' || t.sensor  AS board_sensor,
@@ -170,7 +170,6 @@ LEFT JOIN cf_curves cfx ON cfx.file_id = nf_cfx.file_id
 LEFT JOIN newest nf_cfp ON nf_cfp.board_id = t.board_id AND nf_cfp.sensor = t.sensor
                        AND nf_cfp.kind = 'CF' AND NOT nf_cfp.is_exposed
 LEFT JOIN cf_curves cfp ON cfp.file_id = nf_cfp.file_id
-LEFT JOIN newest_exposed_image xi ON xi.board_id = t.board_id AND xi.sensor = t.sensor
-LEFT JOIN images pi ON pi.board_type = b.board_type AND pi.sensor = t.sensor
-                   AND pi.scan_index = 0
+LEFT JOIN newest_exposed_image xi ON xi.board_id = t.board_id
+LEFT JOIN images pi ON pi.board_type = b.board_type AND pi.scan_index = 0
 WHERE t.status <> 'Not started';

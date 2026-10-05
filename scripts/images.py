@@ -1,19 +1,22 @@
-"""Make a list of every microscope image in the raw image folders.
+"""Make a list of every whole-board microscope scan in the raw image folders.
 
-Image names look like  03_01_0036_001_U1.jpg  :
-  board 03_01_0036, scan number 001, sensor U1.
-Scan 000 is a pristine reference, 001 or more is exposed.
-We store the file's path and fingerprint, not the picture itself.
+Two kinds of names:
+  03_01_0036_20241216_001.jpg   exposed scan: board 03_01_0036, date 2024-12-16, scan 001
+  03_01_0246_000.jpg            pristine template: board 03_01_0246, scan 000
+Scan 000 is a pristine template (shared by all boards of that board type),
+001 or more is an exposed scan. We store the file's path and fingerprint,
+not the picture itself.
 """
 
 import os
+from datetime import date
 
 from scan_files import fingerprint
 
 # The folders that hold images, relative to the raw data folder.
 IMAGE_FOLDERS = [
-    "imgscans_exposed_sensors",
-    "imgscans_pristine_sensors",
+    "imgscans_exposed",
+    "imgscans_pristine",
 ]
 
 
@@ -22,15 +25,25 @@ def parse_image_name(filename):
     if not filename.lower().endswith(".jpg"):
         raise ValueError("Unexpected image filename: " + filename)
     parts = filename[: -len(".jpg")].split("_")
-    # Expect 5 pieces: board (3 pieces), scan number, sensor.
-    if len(parts) != 5 or not parts[3].isdigit():
-        raise ValueError("Unexpected image filename: " + filename)
     board_id = "_".join(parts[0:3])
+
+    if len(parts) == 5 and len(parts[3]) == 8 and parts[3].isdigit() and parts[4].isdigit():
+        # Exposed scan: the 4th piece is the date written as YYYYMMDD.
+        text = parts[3]
+        scan_date = date(int(text[0:4]), int(text[4:6]), int(text[6:8]))
+        scan_index = int(parts[4])
+    elif len(parts) == 4 and parts[3].isdigit():
+        # Pristine template: no date in the name.
+        scan_date = None
+        scan_index = int(parts[3])
+    else:
+        raise ValueError("Unexpected image filename: " + filename)
+
     return {
         "board_id": board_id,
         "board_type": int(parts[1]),           # middle number of the board ID
-        "scan_index": int(parts[3]),
-        "sensor": parts[4].upper(),
+        "scan_date": scan_date,
+        "scan_index": scan_index,
     }
 
 

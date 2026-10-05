@@ -123,7 +123,7 @@ def main():
 
     # images: one per picture. image_id counts 1, 2, 3... in sorted order.
     image_rows = [
-        (n, i["board_id"], i["board_type"], i["sensor"], i["scan_index"],
+        (n, i["board_id"], i["board_type"], i["scan_date"], i["scan_index"],
          i["repo_path"], i["sha256"])
         for n, i in enumerate(images, start=1)
     ]

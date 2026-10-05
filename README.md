@@ -32,7 +32,7 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
 
 - `cf/`, `cv/`: capacitance vs. frequency and vs. voltage, each split into `*_pristine` and `*_exposed`
 - `current_time/`: current vs. time logged during each test
-- `imgscans_pristine_sensors/`, `imgscans_exposed_sensors/`: microscope images of each sensor
+- `imgscans_pristine/`, `imgscans_exposed/`: whole-board microscope scans (one pristine template per board type; one or more exposed scans per board; the newest is used)
 - `idc_submersion_masterlist_20250505.csv`: the test log (conditions, time to failure)
 
 ## What to know about the data
@@ -41,18 +41,18 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
   The masterlist is used only for test conditions and time to failure, because its file-name columns are unreliable.
 - **Board ID** `03_01_0041`: the middle number (`01`) is the board type (1, 4, 7, 10). All board types share the same sensor layout. Each board has sensors U1 to U4.
 - **Sweep / scan number**: `0` = pristine, `1` or more = exposed (several = additional sweeps). Same for image scan numbers (`000` = pristine).
-- **Pristine images** are shared references: one per board type and sensor, cropped from a single scan of a pristine board.
+- **Pristine images** are shared references: one whole-board template per board type.
 - **`ttf_ms`** is the time LabVIEW stopped the run. This is the label for the ML task.
 - **`final_current_ma`** is the current at that moment. Early runs were logged by hand (in amps, converted to mA); later runs come from the last reading of the LabVIEW current file. If the masterlist date for a file is wrong, the sensor's newest current file is used. A few tests have no current file, and the value is blank.
 - **Units**: capacitance is labelled F in the files but is believed to be pF; impedance is ohms and phase angle degrees. To be confirmed.
-- **`v_test_merged`** gives one row per test (tests that were started). When a sensor has several files of one kind, the newest-dated one is used. A sensor tested twice gets the same newest files for both runs.
+- **`v_test_merged`** gives one row per test (tests that were started). When a sensor has several files of one kind, the newest-dated one is used. A sensor tested twice gets the same newest files for both runs. Each test shows its board's newest exposed scan and the pristine template for its board type, so the four sensors of a board share the same image paths.
 
 ## Schema
 
 One row is: a board (`boards`), a sensor on a board (`sensors`), a masterlist
 liquid (`electrolytes`), one test of one sensor (`tests`), one CSV file
 (`measurement_files`), one CSV's numbers with each column as a list
-(`current_curves`, `cv_curves`, `cf_curves`), one image (`images`).
+(`current_curves`, `cv_curves`, `cf_curves`), one whole-board scan (`images`).
 Views: `v_test_merged` (one row per test, everything side by side) and
 `v_ttf_check` (compares the last logged time with the masterlist time to failure).
 
@@ -146,16 +146,16 @@ CREATE TABLE cf_curves (
          AND len(frequency_hz) = len(phase_deg))
 );
 
--- images: microscope picture paths (the pictures stay as files).
+-- images: whole-board microscope scans (the pictures stay as files).
 CREATE TABLE images (
-  image_id      INTEGER PRIMARY KEY,
-  board_id      VARCHAR NOT NULL REFERENCES boards (board_id),
-  board_type    INTEGER NOT NULL,             -- copied from the board ID
-  sensor        VARCHAR NOT NULL CHECK (sensor IN ('U1','U2','U3','U4')),
-  scan_index    INTEGER NOT NULL CHECK (scan_index >= 0),  -- 0 = pristine (shared per board type), 1+ = exposed
-  repo_path     VARCHAR NOT NULL UNIQUE,
-  sha256        VARCHAR NOT NULL,
-  UNIQUE (board_id, sensor, scan_index)
+  image_id    INTEGER PRIMARY KEY,
+  board_id    VARCHAR NOT NULL REFERENCES boards (board_id),
+  board_type  INTEGER NOT NULL,             -- copied from the board ID
+  scan_date   DATE,                         -- date in the filename; blank for pristine templates
+  scan_index  INTEGER NOT NULL CHECK (scan_index >= 0),  -- 0 = pristine template (shared per board type), 1+ = exposed
+  repo_path   VARCHAR NOT NULL UNIQUE,
+  sha256      VARCHAR NOT NULL,
+  UNIQUE (board_id, scan_date, scan_index)
 );
 ```
 
