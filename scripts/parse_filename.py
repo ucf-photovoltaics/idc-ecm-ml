@@ -18,10 +18,17 @@ def parse_filename(filename):
     stem = filename[: -len(".csv")]
     parts = stem.split("_")
 
+    # Refuse names that don't match one of the two known shapes, so an odd
+    # name fails loudly instead of being quietly misread.
+    is_current = len(parts) == 6 and parts[5] == "I"
+    is_curve = len(parts) == 7 and parts[5] in ("CV", "CF")
+    if not (is_current or is_curve):
+        raise ValueError("Unexpected filename: " + filename)
+
     # Pieces 0, 1, 2 together are the board ID, e.g. "03_01_0026".
     board_id = "_".join(parts[0:3])
-    # Piece 3 is the sensor, e.g. "U1".
-    sensor = parts[3]
+    # Piece 3 is the sensor, e.g. "U1" (a few files write it in lowercase).
+    sensor = parts[3].upper()
     # Piece 4 is the date written as YYYYMMDD, e.g. "20250117".
     text = parts[4]
     file_date = date(int(text[0:4]), int(text[4:6]), int(text[6:8]))
