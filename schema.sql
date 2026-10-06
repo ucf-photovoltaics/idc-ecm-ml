@@ -151,7 +151,12 @@ SELECT
   cfp.frequency_hz AS cf_pristine_frequency_hz, cfp.capacitance_raw AS cf_pristine_capacitance,
   cfp.impedance_ohm AS cf_pristine_impedance,   cfp.phase_deg AS cf_pristine_phase_deg,
   xi.repo_path AS exposed_image_path,
-  pi.repo_path AS pristine_image_path
+  pi.repo_path AS pristine_image_path,
+  nf_cur.repo_path AS current_file_path,
+  nf_cvx.repo_path AS cv_exposed_file_path,
+  nf_cvp.repo_path AS cv_pristine_file_path,
+  nf_cfx.repo_path AS cf_exposed_file_path,
+  nf_cfp.repo_path AS cf_pristine_file_path
 FROM tests t
 JOIN boards b ON b.board_id = t.board_id
 LEFT JOIN electrolytes e ON e.electrolyte_id = t.electrolyte_id

@@ -53,7 +53,7 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
 Every build also writes two files into `results/`, made from the view `v_test_merged` (one row per started test, 417 rows):
 
 - `idc_tests_full.parquet`: everything, including the full current-vs-time, CV and CF curves (each curve is one list per row). Open it with DuckDB, pandas or Polars.
-- `idc_tests_summary.csv`: only the one-value columns (board and sensor, voltage, acid, concentration, pH, time to failure, final current, image paths). Opens in Excel.
+- `idc_tests_summary.csv`: only the one-value columns (board and sensor, voltage, acid, concentration, pH, time to failure, final current) plus the **repo path of each source file**: the current-vs-time CSV, the CV and CF CSVs (exposed and pristine), and the two images. The curves themselves are not in this file; open the file at that path, or use the Parquet. Opens in Excel.
 
 Example, in any DuckDB session: `SELECT board_sensor, ttf_ms FROM 'results/idc_tests_full.parquet' LIMIT 5;`
 

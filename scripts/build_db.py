@@ -27,10 +27,13 @@ DB_PATH = os.path.join(REPO, "build", "idc.duckdb")
 RESULTS_DIR = os.path.join(REPO, "results")
 
 # Columns of v_test_merged that hold a single value (no curves). These go into
-# the short CSV, because Excel cannot show the long curve lists.
+# the short CSV, because Excel cannot show the long curve lists. The curves
+# themselves are given as the path of the raw CSV file they came from.
 SUMMARY_COLUMNS = ("board_sensor, board_type, run_number, voltage_v, acid, "
                    "concentration_mm, ph, ttf_ms, final_current_ma, "
-                   "exposed_image_path, pristine_image_path")
+                   "exposed_image_path, pristine_image_path, current_file_path, "
+                   "cv_exposed_file_path, cv_pristine_file_path, "
+                   "cf_exposed_file_path, cf_pristine_file_path")
 
 
 def main():
