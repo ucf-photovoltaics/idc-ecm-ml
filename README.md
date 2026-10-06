@@ -1,6 +1,6 @@
 # IDC electrochemical-migration database
 
-EMA 5937, ETL part 1/2. Builds a DuckDB database of interdigitated-comb (IDC)
+Builds a DuckDB database of interdigitated-comb (IDC)
 sensor data: time to failure, current vs. time, capacitance/impedance/phase
 curves (CV and CF), and before/after microscope images.
 
