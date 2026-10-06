@@ -1,6 +1,6 @@
 # IDC electrochemical-migration database
 
-EMA 5937, ETL part 1/2. Builds a DuckDB database of interdigitated-comb (IDC)
+Builds a DuckDB database of interdigitated-comb (IDC)
 sensor data: time to failure, current vs. time, capacitance/impedance/phase
 curves (CV and CF), and before/after microscope images.
 
@@ -50,16 +50,18 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
 
 ## Results
 
-Every build also writes two files into `results/`, made from the view `v_test_merged` (one row per started test, 417 rows):
+Every build also writes three files into `results/`, made from the view `v_test_merged` (one row per started test, 417 rows):
 
 - `idc_tests_full.parquet`: everything, including the full current-vs-time, CV and CF curves (each curve is one list per row). Open it with DuckDB, pandas or Polars.
+- `idc_tests_full.csv`: the same table as the Parquet, as a CSV. Each curve is written as a list in one cell, e.g. `[0.0, 0.1, ...]`. Read it with DuckDB, pandas or Polars; see the known issue below before opening it in Excel.
 - `idc_tests_summary.csv`: only the one-value columns (board and sensor, voltage, acid, concentration, pH, time to failure, final current) plus the **repo path of each source file**: the current-vs-time CSV, the CV and CF CSVs (exposed and pristine), and the two images. The curves themselves are not in this file; open the file at that path, or use the Parquet. Opens in Excel.
+
 
 Example, in any DuckDB session: `SELECT board_sensor, ttf_ms FROM 'results/idc_tests_full.parquet' LIMIT 5;`
 
 ### Known issue: the curves do not fit in an Excel cell
 
-Excel allows at most 32,767 characters in one cell. A long current-vs-time curve (one test has 6,599 points) is longer than that, so a CSV with the full curves looks broken in Excel: the end of the list spills onto the next rows. The data is not wrong. That is why the full data is a Parquet file and the CSV has no curves.
+Excel allows at most 32,767 characters in one cell. A long current-vs-time curve (one test has 6,599 points) is longer than that, so in `idc_tests_full.csv` the end of such a list spills onto the next rows when the file is opened in Excel. The file itself is correct, and DuckDB, pandas and Polars read it fine. The build prints how many tests are affected. `idc_tests_summary.csv` has no curves and opens cleanly in Excel.
 
 ## Schema
 

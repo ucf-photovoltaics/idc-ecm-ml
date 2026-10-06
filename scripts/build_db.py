@@ -4,8 +4,8 @@ Steps: start a fresh database, create the tables from schema.sql, then fill
 boards, sensors, electrolytes, measurement_files, tests, the curves and images.
 Running it twice gives the same result, because it always starts fresh and
 everything is sorted. At the end it writes two files into results/ from the
-view v_test_merged: a Parquet file with everything and a short CSV that opens
-in Excel.
+view v_test_merged: a Parquet file and a CSV with everything (each curve is a
+list in one cell), and a short CSV without curves that opens cleanly in Excel.
 """
 
 import os
@@ -150,13 +150,24 @@ def main():
     # Write the results files from the merged view, in a fixed order.
     os.makedirs(RESULTS_DIR, exist_ok=True)
     full_path = os.path.join(RESULTS_DIR, "idc_tests_full.parquet")
+    full_csv_path = os.path.join(RESULTS_DIR, "idc_tests_full.csv")
     summary_path = os.path.join(RESULTS_DIR, "idc_tests_summary.csv")
     order = "ORDER BY board_sensor, run_number"
     con.execute(f"COPY (SELECT * FROM v_test_merged {order}) TO '{full_path}' (FORMAT PARQUET)")
+    con.execute(f"COPY (SELECT * FROM v_test_merged {order}) TO '{full_csv_path}' (HEADER)")
     con.execute(f"COPY (SELECT {SUMMARY_COLUMNS} FROM v_test_merged {order}) "
                 f"TO '{summary_path}' (HEADER)")
     n = con.execute("SELECT count(*) FROM v_test_merged").fetchone()[0]
-    print("results/idc_tests_full.parquet and results/idc_tests_summary.csv written,", n, "rows")
+    print("results/idc_tests_full.parquet, idc_tests_full.csv and idc_tests_summary.csv written,",
+          n, "rows")
+    # Excel keeps at most 32,767 characters per cell. Count the tests whose
+    # current curve is longer than that (they look cut off in Excel only).
+    too_long = con.execute(
+        "SELECT count(*) FROM v_test_merged "
+        "WHERE len(CAST(current_time_ms AS VARCHAR)) > 32767 "
+        "OR len(CAST(current_ma AS VARCHAR)) > 32767").fetchone()[0]
+    print("tests with a curve too long for one Excel cell:", too_long)
+
     con.close()
 
 
