@@ -25,6 +25,7 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
 | `scripts/parse_filename.py`, `scan_files.py` | read file names, list and fingerprint (sha256) files |
 | `scripts/masterlist.py` | clean the masterlist (conditions and time to failure) |
 | `scripts/curves.py`, `images.py` | read curve CSVs and image names |
+| `results/` | files written by the build (see Results below) |
 
 ## Where the raw data lives
 
@@ -44,8 +45,21 @@ Pipeline: `just -> podman -> make -> uv run python scripts/build_db.py -> build/
 - **Pristine images** are shared references: one whole-board template per board type.
 - **`ttf_ms`** is the time LabVIEW stopped the run. This is the label for the ML task.
 - **`final_current_ma`** is the current at that moment. Early runs were logged by hand (in amps, converted to mA); later runs come from the last reading of the LabVIEW current file. If the masterlist date for a file is wrong, the sensor's newest current file is used. A few tests have no current file, and the value is blank.
-- **Units**: capacitance is labelled F in the files but is believed to be pF; impedance is ohms and phase angle degrees. To be confirmed.
+- **Units**: capacitance is in **pF**, although the file header (written by the LabVIEW program) says F. Impedance is in ohms and phase angle in degrees. The column is called `capacitance_raw` because it holds the numbers exactly as in the file.
 - **`v_test_merged`** gives one row per test (tests that were started). When a sensor has several files of one kind, the newest-dated one is used. A sensor tested twice gets the same newest files for both runs. Each test shows its board's newest exposed scan and the pristine template for its board type, so the four sensors of a board share the same image paths.
+
+## Results
+
+Every build also writes two files into `results/`, made from the view `v_test_merged` (one row per started test, 417 rows):
+
+- `idc_tests_full.parquet`: everything, including the full current-vs-time, CV and CF curves (each curve is one list per row). Open it with DuckDB, pandas or Polars.
+- `idc_tests_summary.csv`: only the one-value columns (board and sensor, voltage, acid, concentration, pH, time to failure, final current, image paths). Opens in Excel.
+
+Example, in any DuckDB session: `SELECT board_sensor, ttf_ms FROM 'results/idc_tests_full.parquet' LIMIT 5;`
+
+### Known issue: the curves do not fit in an Excel cell
+
+Excel allows at most 32,767 characters in one cell. A long current-vs-time curve (one test has 6,599 points) is longer than that, so a CSV with the full curves looks broken in Excel: the end of the list spills onto the next rows. The data is not wrong. That is why the full data is a Parquet file and the CSV has no curves.
 
 ## Schema
 
@@ -126,9 +140,9 @@ CREATE TABLE current_curves (
 CREATE TABLE cv_curves (
   file_id          INTEGER PRIMARY KEY REFERENCES measurement_files (file_id),
   voltage_v        DOUBLE[] NOT NULL,         -- volts
-  capacitance_raw  FLOAT[]  NOT NULL,         -- file says F, believed pF (TO CONFIRM)
-  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms (TO CONFIRM)
-  phase_deg        FLOAT[]  NOT NULL,         -- degrees (TO CONFIRM)
+  capacitance_raw  FLOAT[]  NOT NULL,         -- pF (the file header says F, but the values are pF)
+  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms
+  phase_deg        FLOAT[]  NOT NULL,         -- degrees
   CHECK (len(voltage_v) = len(capacitance_raw)
          AND len(voltage_v) = len(impedance_ohm)
          AND len(voltage_v) = len(phase_deg))
@@ -138,9 +152,9 @@ CREATE TABLE cv_curves (
 CREATE TABLE cf_curves (
   file_id          INTEGER PRIMARY KEY REFERENCES measurement_files (file_id),
   frequency_hz     DOUBLE[] NOT NULL,         -- hertz
-  capacitance_raw  FLOAT[]  NOT NULL,         -- file says F, believed pF (TO CONFIRM)
-  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms (TO CONFIRM)
-  phase_deg        FLOAT[]  NOT NULL,         -- degrees (TO CONFIRM)
+  capacitance_raw  FLOAT[]  NOT NULL,         -- pF (the file header says F, but the values are pF)
+  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms
+  phase_deg        FLOAT[]  NOT NULL,         -- degrees
   CHECK (len(frequency_hz) = len(capacitance_raw)
          AND len(frequency_hz) = len(impedance_ohm)
          AND len(frequency_hz) = len(phase_deg))

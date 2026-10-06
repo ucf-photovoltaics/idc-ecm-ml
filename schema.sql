@@ -70,9 +70,9 @@ CREATE TABLE current_curves (
 CREATE TABLE cv_curves (
   file_id          INTEGER PRIMARY KEY REFERENCES measurement_files (file_id),
   voltage_v        DOUBLE[] NOT NULL,         -- volts
-  capacitance_raw  FLOAT[]  NOT NULL,         -- file says F, believed pF (TO CONFIRM)
-  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms (TO CONFIRM)
-  phase_deg        FLOAT[]  NOT NULL,         -- degrees (TO CONFIRM)
+  capacitance_raw  FLOAT[]  NOT NULL,         -- pF (the file header says F, but the values are pF)
+  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms
+  phase_deg        FLOAT[]  NOT NULL,         -- degrees
   CHECK (len(voltage_v) = len(capacitance_raw)
          AND len(voltage_v) = len(impedance_ohm)
          AND len(voltage_v) = len(phase_deg))
@@ -82,9 +82,9 @@ CREATE TABLE cv_curves (
 CREATE TABLE cf_curves (
   file_id          INTEGER PRIMARY KEY REFERENCES measurement_files (file_id),
   frequency_hz     DOUBLE[] NOT NULL,         -- hertz
-  capacitance_raw  FLOAT[]  NOT NULL,         -- file says F, believed pF (TO CONFIRM)
-  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms (TO CONFIRM)
-  phase_deg        FLOAT[]  NOT NULL,         -- degrees (TO CONFIRM)
+  capacitance_raw  FLOAT[]  NOT NULL,         -- pF (the file header says F, but the values are pF)
+  impedance_ohm    FLOAT[]  NOT NULL,         -- ohms
+  phase_deg        FLOAT[]  NOT NULL,         -- degrees
   CHECK (len(frequency_hz) = len(capacitance_raw)
          AND len(frequency_hz) = len(impedance_ohm)
          AND len(frequency_hz) = len(phase_deg))

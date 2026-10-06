@@ -3,7 +3,9 @@
 Steps: start a fresh database, create the tables from schema.sql, then fill
 boards, sensors, electrolytes, measurement_files, tests, the curves and images.
 Running it twice gives the same result, because it always starts fresh and
-everything is sorted.
+everything is sorted. At the end it writes two files into results/ from the
+view v_test_merged: a Parquet file with everything and a short CSV that opens
+in Excel.
 """
 
 import os
@@ -22,6 +24,13 @@ RAW_DIR = os.path.join(REPO, "data", "raw")
 SCHEMA = os.path.join(REPO, "schema.sql")
 MASTERLIST = os.path.join(RAW_DIR, "idc_submersion_masterlist_20250505.csv")
 DB_PATH = os.path.join(REPO, "build", "idc.duckdb")
+RESULTS_DIR = os.path.join(REPO, "results")
+
+# Columns of v_test_merged that hold a single value (no curves). These go into
+# the short CSV, because Excel cannot show the long curve lists.
+SUMMARY_COLUMNS = ("board_sensor, board_type, run_number, voltage_v, acid, "
+                   "concentration_mm, ph, ttf_ms, final_current_ma, "
+                   "exposed_image_path, pristine_image_path")
 
 
 def main():
@@ -134,6 +143,17 @@ def main():
                   "cf_curves", "cv_curves", "current_curves", "images"]:
         count = con.execute("SELECT count(*) FROM " + table).fetchone()[0]
         print(table, count)
+
+    # Write the results files from the merged view, in a fixed order.
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    full_path = os.path.join(RESULTS_DIR, "idc_tests_full.parquet")
+    summary_path = os.path.join(RESULTS_DIR, "idc_tests_summary.csv")
+    order = "ORDER BY board_sensor, run_number"
+    con.execute(f"COPY (SELECT * FROM v_test_merged {order}) TO '{full_path}' (FORMAT PARQUET)")
+    con.execute(f"COPY (SELECT {SUMMARY_COLUMNS} FROM v_test_merged {order}) "
+                f"TO '{summary_path}' (HEADER)")
+    n = con.execute("SELECT count(*) FROM v_test_merged").fetchone()[0]
+    print("results/idc_tests_full.parquet and results/idc_tests_summary.csv written,", n, "rows")
     con.close()
 
 
