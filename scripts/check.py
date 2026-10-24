@@ -15,6 +15,7 @@ import sys
 
 import numpy as np
 
+from curve_arrays import SET_NAMES
 from make_tensors import SENSORS, target_size
 from split import N_FOLDS
 
@@ -33,7 +34,7 @@ def check_arrays(files, notes):
     for sp in ("train", "eval"):
         scale = float(notes[sp]["scale"])
         for sensor in SENSORS:
-            for name in ("x", "y", "fold", "board", "run"):
+            for name in ("x", "y", "fold", "board", "run", "curve_len") + SET_NAMES:
                 if f"{sensor}_{name}" not in files[sp]:
                     fail(f"{sp} file has no {sensor}_{name}")
             x, y = files[sp][f"{sensor}_x"], files[sp][f"{sensor}_y"]
@@ -44,6 +45,19 @@ def check_arrays(files, notes):
                 fail(f"{sp} {sensor}_x has shape {x.shape}, expected (N, 2, {h}, {w})")
             if not (len(x) == len(y) == len(fold) == len(board)):
                 fail(f"{sp} {sensor}: pictures, labels and folds have different lengths")
+            # 2b. Curves: one row per sample, lengths fit, padding is NaN, real values are finite.
+            n_len = files[sp][f"{sensor}_curve_len"]
+            if n_len.shape != (len(y), len(SET_NAMES)):
+                fail(f"{sp} {sensor}_curve_len has shape {n_len.shape}")
+            for k, name in enumerate(SET_NAMES):
+                c = files[sp][f"{sensor}_{name}"]
+                if len(c) != len(y) or n_len[:, k].max() > c.shape[2] or n_len[:, k].min() < 0:
+                    fail(f"{sp} {sensor}_{name}: shape {c.shape} does not fit the lengths")
+                real = np.arange(c.shape[2])[None, :] < n_len[:, k][:, None]      # [N, points]
+                if not np.isfinite(c[np.broadcast_to(real[:, None, :], c.shape)]).all():
+                    fail(f"{sp} {sensor}_{name}: a real curve point is NaN or infinite")
+                if np.isfinite(c[np.broadcast_to(~real[:, None, :], c.shape)]).any():
+                    fail(f"{sp} {sensor}_{name}: padding is not NaN")
             if (x.min(axis=(2, 3)) == x.max(axis=(2, 3))).any():   # blank = one grey level only (no big copies)
                 fail(f"{sp} {sensor}: a picture layer is completely blank")
             if not np.isfinite(y).all() or (y <= 0).any():

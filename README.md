@@ -228,7 +228,24 @@ Output is written to a temporary name and swapped in, so a stopped build never l
 Rebuilds should give identical files: compare `sha256sum data/inputs/*` before and after
 `rm -rf build data/inputs && just`.
 
+### Curves and LCR in the files
+
+Every sample also carries its full, uncut measurements, per sensor `S`, NaN-padded to the longest curve:
+
+| Name | Shape | Columns |
+|---|---|---|
+| `S_current` | [N, 2, 6599] | time (ms), current (mA) |
+| `S_cv_exposed`, `S_cv_pristine` | [N, 4, 51] | voltage (V), capacitance (pF), impedance (ohm), phase (deg) |
+| `S_cf_exposed`, `S_cf_pristine` | [N, 4, 61] | frequency (Hz), capacitance (pF), impedance (ohm), phase (deg) |
+| `S_curve_len` | [N, 5] | real points in each of the five sets above (that order); 0 = no file, row is all NaN |
+
+Use `curve_len` to mask the NaN padding. The file notes (`curves`) repeat this list.
+
+**Warning (label leak):** the last time stamp of a current curve equals the time to failure (299 of 305 tests
+within 5%). Do not feed a whole current curve to a model that predicts time to failure. These arrays are there
+to correlate with image-derived measurements.
+
 ### Not done yet
 
-Current-vs-time curves are not in the files yet. Pictures are grey-scale (colour is dropped), and the
-alignment of pristine and exposed layers is checked by eye, not by a number.
+Pictures are grey-scale (colour is dropped), and the alignment of pristine and exposed layers is checked by eye,
+not by a number.

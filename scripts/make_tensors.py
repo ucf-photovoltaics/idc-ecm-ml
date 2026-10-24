@@ -17,6 +17,9 @@ Names inside a file, for each sensor S in U1..U4  (N = number of samples):
   S_fold   int64   [N]            training fold 0-4, or -1 for evaluation
   S_board  int64   [N]            which board (position in the "boards" list in the file notes)
   S_run    int64   [N]            1 = first test of that sensor, 2 = second test, ...
+  S_current, S_cv_exposed, S_cv_pristine, S_cf_exposed, S_cf_pristine
+           float32 [N, columns, points]   the full curves, NaN-padded (see curve_arrays.py)
+  S_curve_len  int64 [N, 5]       real number of points in each of those five curves (0 = none)
 
 Size setting: IDC_SCALE (default 1 = full resolution). IDC_SCALE=0.25 makes a
 quick, small version for testing.
@@ -29,6 +32,7 @@ import cv2
 import numpy as np
 
 from crop_sensors import crop_sensors
+from curve_arrays import SET_NAMES, describe_curves, load_curves, empty_slots, fill_slot, max_lengths
 from samples import check_samples, load_samples
 from split import N_FOLDS, SEED, assign_boards, check_no_leakage
 
@@ -51,7 +55,7 @@ def fixed_grey(bgr_crop, size):
     return cv2.resize(grey, size, interpolation=cv2.INTER_AREA if shrinking else cv2.INTER_CUBIC)
 
 
-def build_tensors(samples, roles, scale=1.0, repo_root="."):
+def build_tensors(samples, roles, scale=1.0, repo_root=".", curves=None):
     """Return {"train": (tensors, notes), "eval": (tensors, notes)}.
 
     Pictures are cut from each board's scan ONCE and copied into place, so memory
@@ -70,6 +74,9 @@ def build_tensors(samples, roles, scale=1.0, repo_root="."):
         tensors[sp, sensor] = dict(
             x=np.zeros((n, 2, h, w), np.uint8), y=np.zeros(n, np.float32),
             fold=np.zeros(n, np.int64), board=np.zeros(n, np.int64), run=np.zeros(n, np.int64))
+    longest = max_lengths(curves, samples)    # one width per curve set, shared by train and eval
+    for (sp, sensor), n in counts.items():
+        tensors[sp, sensor].update(empty_slots(n, longest))
     boards = {sp: sorted({s["board_id"] for s in samples if split_of(s) == sp}) for sp in ("train", "eval")}
 
     pristine = {}  # pristine crops for each board type, made once
@@ -93,13 +100,15 @@ def build_tensors(samples, roles, scale=1.0, repo_root="."):
             t["fold"][j] = roles[board_id]
             t["board"][j] = boards[sp].index(board_id)
             t["run"][j] = s["run_number"]
+            fill_slot(t, j, (curves or {}).get((board_id, sensor, s["run_number"]), {}))
         print(f"  {board_id}: {len(by_board[board_id])} sensors", flush=True)
 
     out = {}
     for sp in ("train", "eval"):
         flat = {f"{sensor}_{name}": arr for (p, sensor), d in tensors.items() if p == sp for name, arr in d.items()}
         notes = {"boards": json.dumps(boards[sp]), "seed": str(SEED), "n_folds": str(N_FOLDS),
-                 "scale": str(scale), "layers": "0=pristine,1=exposed (grey-scale)", "label": "time to failure, ms"}
+                 "scale": str(scale), "layers": "0=pristine,1=exposed (grey-scale)", "label": "time to failure, ms",
+                 "curves": describe_curves()}
         out[sp] = (flat, notes)
     return out
 
@@ -110,12 +119,13 @@ def main():
     scale = float(os.environ.get("IDC_SCALE", "1"))
     con = duckdb.connect("build/idc.duckdb", read_only=True)
     samples = load_samples(con)
+    curves = load_curves(con)
     check_samples(samples)
     roles = assign_boards({s["board_id"]: s["board_type"] for s in samples})
     check_no_leakage(samples, roles)
     print(f"building {len(samples)} samples at scale {scale}")
     os.makedirs(OUT_DIR, exist_ok=True)
-    for sp, (flat, notes) in build_tensors(samples, roles, scale).items():
+    for sp, (flat, notes) in build_tensors(samples, roles, scale, curves=curves).items():
         final = os.path.join(OUT_DIR, f"{sp}.safetensors")
         save_file(flat, final + ".tmp", metadata=notes)   # write aside first ...
         os.replace(final + ".tmp", final)                 # ... then swap in: never a half-written file
