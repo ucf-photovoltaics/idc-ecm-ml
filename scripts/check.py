@@ -44,7 +44,7 @@ def check_arrays(files, notes):
                 fail(f"{sp} {sensor}_x has shape {x.shape}, expected (N, 2, {h}, {w})")
             if not (len(x) == len(y) == len(fold) == len(board)):
                 fail(f"{sp} {sensor}: pictures, labels and folds have different lengths")
-            if x.std(axis=(2, 3)).min() == 0:
+            if (x.min(axis=(2, 3)) == x.max(axis=(2, 3))).any():   # blank = one grey level only (no big copies)
                 fail(f"{sp} {sensor}: a picture layer is completely blank")
             if not np.isfinite(y).all() or (y <= 0).any():
                 fail(f"{sp} {sensor}: a time-to-failure is missing or not positive")
