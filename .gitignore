@@ -3,3 +3,4 @@ build/
 .venv/
 fingerprint_check.py
 results/long_format/
+data/inputs/

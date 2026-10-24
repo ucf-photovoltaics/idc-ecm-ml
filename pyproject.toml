@@ -3,4 +3,17 @@ name = "idc-ecm-ml"
 version = "0.1.0"
 description = "IDC electrochemical-migration database (EMA 5937 ETL)"
 requires-python = ">=3.11"
-dependencies = ["duckdb>=1.2"]
+dependencies = [
+    "duckdb>=1.2",
+    "opencv-python-headless>=5.0.0.93",
+    "safetensors>=0.8.0",
+    "torch>=2.14.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
