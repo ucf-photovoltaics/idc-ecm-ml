@@ -176,3 +176,59 @@ CREATE TABLE images (
 ```
 
 The full file, including the views, is `schema.sql`.
+
+## ETL part 2: pictures and labels for a model
+
+Pipeline: `Justfile -> Containerfile -> Makefile -> scripts/*.py -> build/idc.duckdb -> data/inputs/{train,eval}.safetensors`
+
+### What one sample is
+
+One sensor (U1-U4) on one board with a measured time to failure (test status `Failed` or
+`Measure/Scanned`; `In progress` and `Not started` are left out). That gives 367 samples from 92 boards.
+Each sample is a two-layer grey-scale picture, layer 0 = pristine sensor, layer 1 = exposed sensor,
+and a label: time to failure in ms.
+
+| Step | Script | What it does |
+|---|---|---|
+| list samples | `scripts/samples.py` | queries the database; newest exposed scan per board (latest date, then highest scan number); pristine template for the board type |
+| cut out sensors | `scripts/crop_sensors.py` | levels the board scan (tilt, centre, size), cuts each sensor with a margin so electrode ends are not clipped |
+| split | `scripts/split.py` | by BOARD, seeded, same every run (below) |
+| write files | `scripts/make_tensors.py` | fixed size per sensor, pristine enlarged to match, writes both files |
+| check | `scripts/check.py` | shapes, blank pictures, labels, leakage, folds, DataLoader |
+
+### No leakage
+
+All sensors of a board go to the same side. 18 boards (71 samples) are held out for evaluation; the other
+74 boards (296 samples) are dealt into 5 cross-validation folds. Boards are shuffled with a fixed seed
+(5937) separately for each board type, so every type appears in every fold. `just check` stops if a
+board is in both files or a fold is empty.
+
+### Loading
+
+~~~
+from safetensors.torch import load_file
+from torch.utils.data import DataLoader, TensorDataset
+
+t = load_file("data/inputs/train.safetensors")
+keep = t["U1_fold"] != 0                      # hold out cross-validation fold 0
+data = TensorDataset(t["U1_x"][keep], t["U1_y"][keep])
+loader = DataLoader(data, batch_size=4)
+~~~
+
+For each sensor S: `S_x` (uint8, N x 2 x H x W), `S_y` (ms), `S_fold` (0-4, or -1 for evaluation),
+`S_board`, `S_run`. The file notes list the board IDs. Each sensor has its own fixed size
+(U1 2496x1136, U2 1408x1840, U3 1232x2768, U4 1248x3696 at full resolution). `IDC_SCALE=0.125 just`
+makes a small test version (delete `data/inputs` before a full build).
+
+### Repeatable
+
+`make` rebuilds only what changed: edit a picture script and only the two files are rebuilt; edit a
+raw file and the database and files are rebuilt; edit nothing and nothing runs (`just check` prints this).
+Output is written to a temporary name and swapped in, so a stopped build never leaves a half file.
+Rebuilds should give identical files: compare `sha256sum data/inputs/*` before and after
+`rm -rf build data/inputs && just`.
+
+### Not done yet
+
+Current-vs-time curves are not in the files yet. Pictures are grey-scale (colour is dropped), and the
+alignment of pristine and exposed layers is checked by eye, not by a number.
