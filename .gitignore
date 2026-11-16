@@ -4,3 +4,7 @@ build/
 fingerprint_check.py
 results/long_format/
 data/inputs/
+# Made by `just` (model score, figures, report): rebuilt every run, so never committed
+results/results.json
+results/report.pdf
+results/figures/

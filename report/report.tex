@@ -1,0 +1,143 @@
+% Model & Report, Part I.  Built by `just` (see the Makefile).  Numbers come from build/report/numbers.tex,
+% which scripts/make_report.py writes from results/results.json.  Do not type results into this file.
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\graphicspath{{results/figures/}}
+\input{build/report/numbers.tex}
+
+\newcommand{\reportauthor}{Janice Yeung}   % change here if needed
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+
+\title{Time to failure of IDC sensors from before/after pictures\\[0.3em]
+       \large EMA 5937 --- Model \& Report, Part I (pipeline milestone)}
+\author{\reportauthor}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{What this report is}
+
+This milestone checks that the whole chain works: database $\rightarrow$ pictures $\rightarrow$ model
+$\rightarrow$ held-out scores $\rightarrow$ figures $\rightarrow$ this report, all from one command (\texttt{just}).
+The model is a deliberately simple baseline; making it good is Part II.  The main result is therefore
+the \emph{structure} of the evaluation: a held-out score shown next to a negative control (a dummy
+that cannot learn) and a positive control (a ``model'' that is given the answer).
+
+\section{Data and split}
+
+One sample is one sensor (U1--U4) on one board with a measured time to failure.  Its input is two
+grey-scale pictures of the sensor, pristine and exposed, each shrunk to \Pixels$\times$\Pixels\ pixels
+(from the tensors built at scale \Scale), plus which sensor it is.  The quantity to predict is
+$\log_{10}$ of the time to failure in milliseconds.
+
+All sensors of a board go to the same side of the split, so the model is never tested on a board it
+has seen.  The training file has \NTrainFile\ sensors from \NBoardsTrain\ boards.  Of these,
+cross-validation fold \ValFold\ (\NCheck\ sensors, whole boards) is the \emph{check set} used to watch training, and
+the other \NLearned\ sensors are learned from.  The \emph{held-out test set} is a separate file of
+\NTest\ sensors from \NBoardsTest\ boards (\PerSensor); the number of boards shared with training
+is \NBoardsShared.  The test file is opened only by the scoring step, after training has finished.
+
+\section{Model and training}
+
+The model is a shallow neural network written in numpy: \Pixels$\times$\Pixels$\times$2 picture
+values and a one-hot sensor label go in, one hidden layer of \Hidden\ units follows, and one number
+(the guessed $\log_{10}$ time) comes out (\NWeights\ weights in total).  It is trained with Adam (learning rate
+\LearningRate, weight decay \WeightDecay, batches of \Batch) for \Epochs\ epochs (\NSteps\ steps), and the weights
+from the epoch with the lowest check-set loss are kept (epoch \BestEpoch).
+
+Figure~\ref{fig:train} shows the loss on the training samples and on the check set.  A value of 1 means
+no better than always guessing the average.  A training loss that keeps falling while the check-set loss
+stalls or rises means the model is starting to memorise rather than learn, which is why the best epoch is chosen on
+the check set.  Here the check-set loss at the best epoch is \BestValLoss, against \DummyValLoss\ for the dummy,
+and the training loss at the last epoch is \FinalTrainLoss.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{training_curve.pdf}
+\caption{Training curve.  Dashed orange line: the dummy on the same check set.}
+\label{fig:train}
+\end{figure}
+
+\section{Controls}
+
+\textbf{Negative control (dummy).}  Ignores the pictures and always guesses the average
+$\log_{10}$ time of the training set.  It cannot learn, so its AUC must be exactly 0.5 and its $R^2$ at or below 0.
+A model that does not beat this has learned nothing.
+
+\textbf{Positive control.}  Cheats on purpose.  The last time stamp of a sensor's current-versus-time curve
+\emph{is} the time to failure (a label leak recorded in the ETL notes), so a straight line through it,
+fitted on the training samples, should predict almost perfectly.  It is not a usable model, because the
+current curve is only known once the sensor has failed.  Its job is to show that the loading, ordering and
+scoring code can detect a model that has the signal.  Only \NWithCurrent\ of the \NTest\ test sensors
+have a current file; the rest get the training average, which limits its overall score.  Table~\ref{tab:subset}
+therefore also scores all three on just the sensors that have a current file.
+
+\section{Held-out results}
+
+Scores on the held-out test set (\NTest\ sensors).  $R^2$ is 1 for perfect guesses and 0 for always guessing the
+test-set average.  ``Typical miss'' is $10^{\mathrm{MAE}}$: a value of 2$\times$ means the guess is usually within a factor
+of two of the true time.  AUC asks whether the guess separates short-lived sensors (below the training median of
+\ThresholdSeconds\ s; \NShort\ of the \NTest\ test sensors) from long-lived ones; 0.5 is a coin flip.  The 95\% intervals
+re-draw whole boards \NBoot\ times, because sensors on one board are not independent.
+
+\begin{table}[htbp]
+\centering
+\small
+\metricstable
+\caption{Held-out test scores (all \NTest\ sensors).}
+\label{tab:main}
+\end{table}
+
+\AucVerdict
+
+\begin{table}[htbp]
+\centering
+\small
+\subsettable
+\caption{The same scores on only the \NWithCurrent\ test sensors that have a current file.}
+\label{tab:subset}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{roc.pdf}
+\caption{ROC curves on the held-out test set.  The dummy lies on the diagonal.}
+\label{fig:roc}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{parity.pdf}
+\caption{Guessed versus true $\log_{10}$ time to failure on the held-out test set.  The grey line is a perfect guess.
+Flat rows of dots are samples where the guess is the training average (always for the dummy; for the positive
+control, sensors without a current file).}
+\label{fig:parity}
+\end{figure}
+
+\section{What this does and does not show}
+
+\begin{itemize}
+\item The chain runs end to end, and changing the data changes the figures and tables: the Makefile
+      rebuilds the database, the tensors, the model, the scores, the figures and this report in that order.
+\item The controls are checked by \texttt{just check}: the dummy must score AUC 0.5 and $R^2$ at or below 0, and the positive
+      control must reproduce the truth on the sensors that have a current file.  In this run the dummy scores AUC \AucDummy\ and
+      $R^2$ \RsqDummy, and the positive control scores $R^2$ \RsqSubPos\ and AUC \AucSubPos\ on those sensors.
+\item The test set is small (\NBoardsTest\ boards), so the intervals are wide and the model's score
+      should be read as ``consistent with'' rather than ``shown to be''.  Also, \NShort\ of the \NTest\ test sensors lie below the
+      training median; a share far from one half means the test boards differ from the training boards, which
+      lowers $R^2$ even when the ranking (AUC) is reasonable.
+\item The pictures may carry information about the test conditions or the scan batch (for example the applied
+      voltage, which is not an input) rather than about degradation.  Part II should check what the model is
+      actually using.
+\end{itemize}
+
+\section{Next steps (Part II)}
+
+\emph{To be written for Part II:} the model choice (for example DINOv3 or U-Net), what changes in the data, how the
+score is optimised (on the check set or by cross-validation, never on the test set), and the discussion of results.
+
+\end{document}

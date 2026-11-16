@@ -249,3 +249,97 @@ to correlate with image-derived measurements.
 
 Pictures are grey-scale (colour is dropped), and the alignment of pristine and exposed layers is checked by eye,
 not by a number.
+
+## Model & Report, part 1: train, score, report
+
+Pipeline: `Justfile -> Containerfile -> Makefile -> scripts/*.py -> build/idc.duckdb -> data/inputs/*.safetensors -> build/model/ -> results/results.json -> results/figures/*.pdf + build/report/numbers.tex -> results/report.pdf`
+
+`just` now runs the whole chain. In the terminal you see the model train (one line per epoch with the
+training and check-set loss, then a small text picture of the curve), then the held-out scores of the
+model, the dummy and the positive control. The finished report is `results/report.pdf`; its figures are
+in `results/figures/`. `just check` also verifies the results (see "Checks" below).
+
+The task: from the pristine and exposed pictures of one sensor (plus which sensor it is), guess
+log10(time to failure in ms). The model is a deliberately simple baseline; making it good is part 2.
+
+| Step | Script | What it does |
+|---|---|---|
+| read the tensors | `scripts/data_io.py` | stacks the four sensors into one list, shrinks pictures to 32x32 |
+| model | `scripts/model.py` | one-hidden-layer neural network in plain numpy, and the training settings |
+| train | `scripts/train.py` | reads **only** `train.safetensors`; sets fold 0 aside as a check set; early stopping; writes `build/model/` |
+| score | `scripts/evaluate.py` | the only step that opens `eval.safetensors`; scores model, dummy and positive control; writes `results/results.json` |
+| scoring helpers | `scripts/metrics.py` | R2, MAE, Spearman, ROC/AUC, board-level 95% intervals |
+| figures | `scripts/make_figures.py`, `scripts/miniplot.py` | training curve, ROC, guessed-vs-true; drawn from `results.json` only, with a small PDF writer (no plotting package needed) |
+| report | `report/report.tex`, `scripts/make_report.py` | the text is static; every number comes from `build/report/numbers.tex`, written from `results.json` |
+| check | `scripts/check_results.py` | see "Checks" |
+
+### Three data roles, no leakage
+
+| Role | Where it comes from | Used for |
+|---|---|---|
+| learn from | training file, folds 1-4 | fitting the weights |
+| check set | training file, fold 0 (whole boards) | watching training and choosing the best epoch |
+| held-out test | `eval.safetensors` (18 boards the model never sees) | the reported score, once, at the end |
+
+### The two controls
+
+- **Negative control (dummy):** ignores the pictures and always guesses the training average. It must
+  score AUC 0.5 and R2 at or below 0. Any model has to beat it.
+- **Positive control:** cheats on purpose. The last time stamp of the current-vs-time curve *is* the
+  time to failure (the label leak noted above), so a straight line through it, fitted on the training
+  samples, must score very well. It shows that loading, ordering and scoring work. Only the sensors that
+  have a current file can use it (46 of the 71 held-out ones with the current data); the rest get the training
+  average, so the report also scores everything on just the sensors that have a current file.
+
+Scores are R2, MAE (in log10 ms, also shown as a "typical miss" factor), Spearman, and AUC for telling
+short-lived sensors (below the training median) from long-lived ones. The 95% intervals re-draw whole
+boards 1000 times, because sensors on a board are not independent.
+
+### Checks
+
+`just check` (after the ETL checks) stops with `STOP: ...` if: results are missing or not finite; a board
+is in both files; the dummy does not score AUC 0.5 and R2 <= 0; the positive control does not reproduce the
+truth on sensors with a current file (R2 >= 0.9); the training loss did not go down; a figure or the report is
+missing; or the numbers in the report differ from `results.json`. It does not ask the model to be good.
+
+### What happens when the data change
+
+`make` follows the arrows above, so a change anywhere re-runs only what depends on it:
+
+| You change | What re-runs |
+|---|---|
+| a raw file, `schema.sql`, a database script | everything (database, tensors, model, scores, figures, report) |
+| a tensor script (`crop_sensors.py`, `split.py`, ...) | tensors, model, scores, figures, report |
+| `train.safetensors` | model, scores, figures, report |
+| `eval.safetensors` only | scores, figures, report (**not** training) |
+| `model.py`, `train.py`, `data_io.py` | model, scores, figures, report |
+| `evaluate.py`, `metrics.py` | scores, figures, report |
+| `make_figures.py`, `miniplot.py` | figures, report |
+| `report/report.tex`, `make_report.py` | report only |
+
+`make clean` removes `build/`, `data/inputs/` and the generated results; the committed `results/idc_tests_*`
+files stay. On a machine without `uv`, `make PY=python3` runs the same chain with your own Python.
+
+### Known limits of this baseline
+
+- The held-out file has only 18 boards, so the intervals are wide. With the current data most held-out sensors
+  (50 of 71) are below the training median, so the held-out boards are not distributed like the training boards.
+- Pictures are squeezed to 32x32 and grey-scale, which throws most detail away; the model may also be using
+  batch or condition differences between scans rather than degradation.
+- The check set is a single fold (about 65 sensors), so the best epoch is a noisy choice. Part 2: use all 5 folds.
+- The settings in `model.py` were picked by trying a few values on the check set; they are not tuned.
+
+### Swapping in your own model (part 2)
+
+A new model (a CNN, DINOv3, ...) means rewriting `scripts/model.py` and `scripts/train.py`: `train.py` is
+written around the numpy baseline. Everything after training (scores, controls, figures, report, checks)
+only needs two things, so it can stay as it is:
+
+- `model.py` offers `PIXELS`, `SEED` and `Baseline.load(path)` / `Baseline.predict(x, sensor)`, where
+  `predict` returns the guessed log10(time to failure in ms) for each sample (`x` = pictures
+  `[N, 2, PIXELS, PIXELS]`, `sensor` = 0-3);
+- `train.py` writes `build/model/model.npz` (any file works if you rename it in the `MODEL` line of the
+  Makefile) and `build/model/history.json` with the same keys as now (`epoch`, `train_loss`, `val_loss`,
+  `best_epoch`, `dummy_val_loss`, and the settings listed at the end of `train.py`).
+
+The Makefile already re-runs everything downstream when `model.py` or `train.py` change.

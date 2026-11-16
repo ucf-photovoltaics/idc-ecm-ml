@@ -2,8 +2,10 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # make runs the build steps in the Makefile.
+# The two texlive packages are the small part of TeX Live that turns report/report.tex into a PDF
+# (pdflatex, the article class, graphicx, geometry, booktabs).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends make \
+ && apt-get install -y --no-install-recommends make texlive-latex-base texlive-latex-recommended \
  && rm -rf /var/lib/apt/lists/*
 
 # Keep the packages inside the image (not in your folder), install them once now,
